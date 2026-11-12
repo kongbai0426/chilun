@@ -109,9 +109,8 @@
 <div class="panel" id="panel"></div>
 <div class="hint" id="hint">点地面放置 · 靠近同层自动啮合 · 放到别层圆心共轴 · 拖动旋转 · 滚轮缩放</div>
 <div class="toast" id="toast"></div>
-<div id="fatal"><h2>无法加载 Three.js</h2><p>本版本使用 Three.js 渲染，需要联网从 CDN 加载一次性依赖。<br>请检查网络后刷新；或把本文件放到可联网环境（如 GitHub Pages、本地 Chrome）打开。<br><br>若长期离线使用，我可以给你打包一个内嵌 Three.js 的离线版。</p></div>
-
-<script>window.__gearLoaded=false;setTimeout(function(){if(!window.__gearLoaded){document.getElementById('fatal').style.display='flex';}},5000);</script>
+<div id="loading" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#04080f;color:#7dd3fc;font-size:14px;z-index:98;">正在加载 Three.js…</div>
+<div id="fatal"><h2 id="fatalTitle">无法加载 Three.js</h2><p id="fatalMsg"></p></div>
 <script>
 (function(){
 function boot(){
@@ -632,16 +631,41 @@ renderPanel();
 window.__gearLoaded=true;
 requestAnimationFrame(frame);
 }
-/* ---- 动态加载 Three.js (UMD) ---- */
-function showFatal(){document.getElementById('fatal').style.display='flex';}
-if(window.THREE){boot();}
-else{
-  var _s=document.createElement('script');
-  _s.src='https://unpkg.com/three@0.158.0/build/three.min.js';
-  _s.onload=function(){if(window.THREE)boot();else showFatal();};
-  _s.onerror=showFatal;
-  document.head.appendChild(_s);
+/* ---- 动态加载 Three.js (多源自动切换) ---- */
+var _titleEl=document.getElementById('fatalTitle'),_msgEl=document.getElementById('fatalMsg'),_loadEl=document.getElementById('loading');
+function showFatal(title,msg){if(_loadEl)_loadEl.style.display='none';if(_titleEl)_titleEl.textContent=title;if(_msgEl)_msgEl.innerHTML=msg;document.getElementById('fatal').style.display='flex';}
+function safeBoot(){
+  try{
+    var cv=document.createElement('canvas');
+    var gl=cv.getContext('webgl')||cv.getContext('experimental-webgl');
+    if(!gl){showFatal('浏览器不支持 WebGL','你的设备/浏览器未启用 WebGL，无法渲染 3D。<br>请改用 Chrome，或在浏览器设置里开启“硬件加速 / WebGL”后重试。');return;}
+    if(_loadEl)_loadEl.style.display='none';
+    boot();
+  }catch(e){showFatal('运行出错','启动时发生错误：<br>'+(e&&e.message?e.message:e)+'<br>请截图反馈。');}
 }
+var CDNS=[
+  'https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js',
+  'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r158/build/three.min.js',
+  'https://lib.baomitu.com/three.js/0.158.0/three.min.js',
+  'https://cdn.staticfile.org/three.js/0.158.0/three.min.js',
+  'https://unpkg.com/three@0.158.0/build/three.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/three.js/r158/three.min.js'
+];
+var _idx=0;
+function tryNext(){
+  if(window.THREE){safeBoot();return;}
+  if(_idx>=CDNS.length){showFatal('无法加载 Three.js','已尝试 '+CDNS.length+' 个 CDN 源均失败，通常是网络/VPN 拦截。<br>建议：<br>① 关闭 VPN 或换节点后刷新<br>② 或在电脑上直接打开该文件<br>③ 或告诉我，我给你“把 three.js 一起上传到同仓库”的最稳离线方案。');return;}
+  var url=CDNS[_idx++];
+  if(_loadEl)_loadEl.textContent='正在加载 Three.js…（第 '+_idx+'/'+CDNS.length+' 个源）';
+  var s=document.createElement('script');
+  var done=false;
+  var to=setTimeout(function(){if(!done){done=true;s.onload=s.onerror=null;tryNext();}},4500);
+  s.src=url;
+  s.onload=function(){if(done)return;done=true;clearTimeout(to);if(window.THREE)safeBoot();else tryNext();};
+  s.onerror=function(){if(done)return;done=true;clearTimeout(to);tryNext();};
+  document.head.appendChild(s);
+}
+if(window.THREE){safeBoot();}else{tryNext();}
 })();
 </script>
 </body>
